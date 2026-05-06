@@ -8,6 +8,7 @@ export const chat = new Chat({
   adapters: {
     sendblue: createSendblueAdapter({
       allowedServices: ["iMessage", "SMS", "RCS"],
+      webhookSecretHeader: "sb-signing-secret",
     }),
   },
   state: createMemoryState(),
