@@ -7,7 +7,14 @@ export type ConversationSettings = {
   criteriaUpdatedAt?: string;
 };
 
+export type ConversationMessage = {
+  role: "assistant" | "user";
+  content: string;
+  createdAt: string;
+};
+
 const keyPrefix = "auction-alert:conversation";
+const recentMessageLimit = 20;
 let redis: Redis | undefined;
 
 export async function getConversationCriteria(conversationId?: string) {
@@ -43,6 +50,23 @@ export async function readDefaultCriteria() {
   return readFile(join(process.cwd(), "config", "criteria.md"), "utf8");
 }
 
+export async function appendConversationMessage(conversationId: string | undefined, message: Omit<ConversationMessage, "createdAt">) {
+  if (!conversationId || !hasRedisEnv()) return;
+
+  await getRedis().lpush(messagesKey(conversationId), {
+    ...message,
+    createdAt: new Date().toISOString(),
+  });
+  await getRedis().ltrim(messagesKey(conversationId), 0, recentMessageLimit - 1);
+}
+
+export async function getConversationMessages(conversationId: string | undefined): Promise<ConversationMessage[]> {
+  if (!conversationId || !hasRedisEnv()) return [];
+
+  const messages = await getRedis().lrange<ConversationMessage>(messagesKey(conversationId), 0, recentMessageLimit - 1);
+  return messages.reverse();
+}
+
 function getRedis() {
   if (redis) return redis;
 
@@ -56,6 +80,10 @@ function getRedis() {
 
 function settingsKey(conversationId: string) {
   return `${keyPrefix}:${conversationId}`;
+}
+
+function messagesKey(conversationId: string) {
+  return `${settingsKey(conversationId)}:messages`;
 }
 
 function hasRedisEnv() {

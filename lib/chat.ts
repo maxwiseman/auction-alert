@@ -1,6 +1,7 @@
 import { Chat, type Message, type Thread } from "chat";
 import { createSendblueAdapter, type SendblueMessagePayload } from "chat-adapter-sendblue";
 import { respondToConversation } from "../agent";
+import { appendConversationMessage, getConversationMessages } from "./conversation-settings";
 import { createMemoryState } from "./memory-state";
 
 export const chat = new Chat({
@@ -62,7 +63,7 @@ async function answerThread(thread: Thread, message: Message) {
       );
   }
 
-  const history = await loadSendBlueHistory(thread.id);
+  const history = await loadConversationHistory(thread.id);
   log("history loaded", { threadId: thread.id, messages: history.length });
 
   const messages = [
@@ -96,24 +97,61 @@ async function answerThread(thread: Thread, message: Message) {
   });
   log("agent response generated", { threadId: thread.id, length: response.length, preview: response.slice(0, 160) });
 
+  await appendConversationMessage(thread.id, {
+    role: "user",
+    content: `${senderLabel(message as Message<SendblueMessagePayload>)}: ${message.text ?? ""}`,
+  });
+
   if (response) {
     await thread.post(response);
+    await appendConversationMessage(thread.id, { role: "assistant", content: response });
     log("response posted", { threadId: thread.id });
   } else {
     log("empty response skipped", { threadId: thread.id });
   }
+
 }
 
 async function loadSendBlueHistory(threadId: string) {
   const adapter = chat.getAdapter("sendblue");
   const messages = await adapter.fetchMessages?.(threadId, { limit: 20 });
   const items = (messages?.messages ?? []) as Message<SendblueMessagePayload>[];
-  log("sendblue fetchMessages result", { threadId, messages: items.length, nextCursor: messages?.nextCursor });
+  const outbound = items.filter((item) => isOutbound(item)).length;
+  log("sendblue fetchMessages result", { threadId, messages: items.length, outbound, nextCursor: messages?.nextCursor });
 
   return items.map((item) => ({
-    role: item.author.isMe ? ("assistant" as const) : ("user" as const),
-    content: item.author.isMe ? item.text ?? "" : `${senderLabel(item)}: ${item.text ?? ""}`,
+    role: isOutbound(item) ? ("assistant" as const) : ("user" as const),
+    content: isOutbound(item) ? item.text ?? "" : `${senderLabel(item)}: ${item.text ?? ""}`,
   }));
+}
+
+async function loadConversationHistory(threadId: string) {
+  const [sendBlueHistory, storedHistory] = await Promise.all([
+    loadSendBlueHistory(threadId),
+    getConversationMessages(threadId),
+  ]);
+
+  if (storedHistory.length === 0) return sendBlueHistory;
+
+  const merged = [...sendBlueHistory];
+  for (const stored of storedHistory) {
+    if (!merged.some((message) => message.role === stored.role && message.content === stored.content)) {
+      merged.push({ role: stored.role, content: stored.content });
+    }
+  }
+
+  log("merged stored conversation history", {
+    threadId,
+    sendBlueMessages: sendBlueHistory.length,
+    storedMessages: storedHistory.length,
+    mergedMessages: merged.length,
+  });
+
+  return merged.slice(-20);
+}
+
+function isOutbound(message: Message<SendblueMessagePayload>) {
+  return Boolean(message.raw?.is_outbound ?? message.author.isMe);
 }
 
 function senderLabel(message: Partial<ChatMessage>) {
