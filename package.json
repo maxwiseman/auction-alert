@@ -1,15 +1,36 @@
 {
-  "name": "nitro-starter",
+  "name": "auction-alert",
   "type": "module",
   "scripts": {
     "build": "nitro build",
     "dev": "nitro dev",
-    "preview": "nitro preview"
+    "preview": "nitro preview",
+    "alert": "bun run scripts/run-alert.ts",
+    "test:delivery": "bun run scripts/test-delivery.ts",
+    "test:links": "bun run scripts/test-link-formats.ts",
+    "test:links:diagnose": "bun run scripts/test-link-diagnostics.ts",
+    "test:delivery:native-photon": "bun run scripts/test-native-photon-delivery.ts",
+    "test:delivery:native-local": "bun run scripts/test-native-local-imessage.ts",
+    "test:extract": "bun run scripts/test-extraction.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@chat-adapter/state-memory": "^4.27.0",
+    "@chat-adapter/state-redis": "^4.27.0",
+    "@photon-ai/advanced-imessage": "^0.6.0",
+    "@upstash/redis": "^1.38.0",
+    "ai": "latest",
+    "chat": "^4.27.0",
+    "chat-adapter-imessage": "^0.1.1",
+    "redis": "^5.12.1",
+    "spectrum-ts": "^1.4.0",
+    "zod": "latest"
   },
   "imports": {
     "#*": "./*"
   },
   "devDependencies": {
+    "@types/node": "^25.6.0",
     "nitro": "latest"
   }
 }
