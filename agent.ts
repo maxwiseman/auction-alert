@@ -34,7 +34,8 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
       "Be opinionated and useful. Prefer concrete reasons over generic enthusiasm.",
       "Assume BaT vehicles are in decent condition unless the listing details mention a real issue. Do not invent generic condition worries.",
       "If there are major issues, they should be visible in the listing description, details, comments, or bid history returned by tools.",
-      "When you recommend auctions, include the URL only if the caller asks for inline links. The daily sender will send URLs separately.",
+      "When you reference a specific car, include its Bring a Trailer URL in the same message.",
+      "If you need a car URL after inspecting details, use the url field returned by getAuctionDetails.",
       "Use tapbacks when they make the native iMessage experience better.",
     ].join("\n"),
     stopWhen: stepCountIs(8),
@@ -115,17 +116,6 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
           const adapter = runtime.chat.getAdapter?.("sendblue") as SendblueLike | undefined;
           if (!adapter?.addReaction) return { ok: false, reason: "SendBlue adapter does not expose addReaction." };
           await adapter.addReaction(runtime.threadId, messageId ?? runtime.threadId, reaction);
-          return { ok: true };
-        },
-      }),
-      sendRichLink: tool({
-        description: "Send a URL as its own iMessage so Apple clients can render a rich link preview.",
-        inputSchema: z.object({
-          url: z.string().url(),
-        }),
-        execute: async ({ url }) => {
-          if (!runtime.chat || !runtime.threadId) return { ok: false, reason: "No active SendBlue thread." };
-          await runtime.chat.send?.("sendblue", runtime.threadId, url);
           return { ok: true };
         },
       }),
