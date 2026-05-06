@@ -7,11 +7,14 @@
     "dev": "nitro dev",
     "build": "nitro build",
     "preview": "node .output/server/index.mjs",
+    "test:auctions": "bun scripts/test-auctions.ts",
     "test:daily": "bun scripts/test-daily-alert.ts",
     "send:test-daily": "bun scripts/test-daily-alert.ts --send",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@ai-sdk/openai": "^3.0.61",
+    "@upstash/redis": "^1.35.6",
     "ai": "^6.0.83",
     "chat": "^4.23.0",
     "chat-adapter-sendblue": "^0.1.0",

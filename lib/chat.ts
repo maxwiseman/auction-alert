@@ -57,6 +57,7 @@ async function answerThread(thread: Thread, message: Message) {
   ];
 
   const response = await respondToConversation(messages, {
+    conversationId: thread.id,
     threadId: thread.id,
     chat: {
       getAdapter: (name) => (name === "sendblue" ? chat.getAdapter("sendblue") : undefined),

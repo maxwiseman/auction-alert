@@ -4,19 +4,27 @@ export type Auction = {
   id: string;
   title: string;
   url: string;
+  countryCode?: string;
   location?: string;
   currentBidUsd?: number;
+  currentBidFormatted?: string;
   endsAt?: string;
   hoursRemaining?: number;
   imageUrl?: string;
   excerpt?: string;
+  noReserve?: boolean;
+  premium?: boolean;
+  year?: string;
 };
 
 export type AuctionFilters = typeof filters;
+export type AuctionFilterOptions = Partial<Omit<AuctionFilters, "sourceUrl">>;
 
 const moneyPattern = /\$([\d,]+)/;
+const auctionsInitialDataPattern =
+  /<script[^>]+id=['"]bat-theme-auctions-current-initial-data['"][^>]*>[\s\S]*?var\s+auctionsCurrentInitialData\s*=\s*(\{[\s\S]*?\});\s*\/\*\s*\]\]>\s*\*\/\s*<\/script>/i;
 
-export async function fetchLiveAuctions(config: AuctionFilters = filters): Promise<Auction[]> {
+export async function fetchLiveAuctions(config: Pick<AuctionFilters, "sourceUrl"> = filters): Promise<Auction[]> {
   const response = await fetch(config.sourceUrl, {
     headers: {
       "user-agent": "auction-alert/0.1 (+https://vercel.com)",
@@ -29,11 +37,12 @@ export async function fetchLiveAuctions(config: AuctionFilters = filters): Promi
   }
 
   const html = await response.text();
-  return normalizeAuctions(extractJsonValues(html));
+  return parseAuctionsHtml(html);
 }
 
-export async function listFilteredAuctions(config: AuctionFilters = filters): Promise<Auction[]> {
-  const auctions = await fetchLiveAuctions(config);
+export async function listFilteredAuctions(options: AuctionFilterOptions = {}): Promise<Auction[]> {
+  const config = { ...filters, ...options };
+  const auctions = await fetchLiveAuctions({ sourceUrl: filters.sourceUrl });
   return auctions.filter((auction) => matchesFilters(auction, config)).slice(0, config.limit);
 }
 
@@ -77,13 +86,63 @@ function matchesFilters(auction: Auction, config: AuctionFilters) {
 
   return (
     looksUsBased &&
-    (auction.currentBidUsd == null || auction.currentBidUsd <= config.maxBidUsd) &&
+    auction.countryCode === config.country &&
+    auction.currentBidUsd != null &&
+    auction.currentBidUsd <= config.maxBidUsd &&
     (auction.hoursRemaining == null || auction.hoursRemaining <= config.maxHoursRemaining)
   );
 }
 
+export function parseAuctionsHtml(html: string): Auction[] {
+  const currentData = extractAuctionsCurrentInitialData(html);
+  if (currentData) {
+    return currentData.items.map(auctionFromBatListing);
+  }
+
+  return normalizeAuctions(extractJsonValues(html));
+}
+
+function extractAuctionsCurrentInitialData(html: string) {
+  const match = auctionsInitialDataPattern.exec(html);
+  if (!match) return undefined;
+
+  try {
+    const parsed = JSON.parse(match[1]) as unknown;
+    if (!isRecord(parsed) || !Array.isArray(parsed.items)) return undefined;
+    return { items: parsed.items.filter(isRecord) as BatListing[] };
+  } catch {
+    return undefined;
+  }
+}
+
+function auctionFromBatListing(listing: BatListing): Auction {
+  const timestampEnd = numberValue(listing.timestamp_end);
+  const endsAt = timestampEnd ? new Date(timestampEnd * 1000).toISOString() : undefined;
+  const url = stringValue(listing.url) ?? "";
+
+  return {
+    id: String(listing.id ?? url.split("/").filter(Boolean).at(-1) ?? url),
+    title: cleanText(stringValue(listing.title) ?? "Bring a Trailer auction"),
+    url,
+    countryCode: stringValue(listing.country_code),
+    location: cleanText(stringValue(listing.country) ?? stringValue(listing.searchable)?.match(/Located in ([^]+?)(?: [A-Z0-9]{6,}|$)/)?.[1] ?? ""),
+    currentBidUsd: stringValue(listing.currency) === "USD" ? numberValue(listing.current_bid) : undefined,
+    currentBidFormatted: cleanText(stringValue(listing.current_bid_formatted) ?? ""),
+    endsAt,
+    hoursRemaining: hoursRemaining(endsAt),
+    imageUrl: stringValue(listing.thumbnail_url),
+    excerpt: cleanText(stringValue(listing.excerpt) ?? "").slice(0, 500),
+    noReserve: Boolean(listing.noreserve),
+    premium: Boolean(listing.premium),
+    year: stringValue(listing.year),
+  };
+}
+
 function extractJsonValues(html: string): unknown[] {
   const values: unknown[] = [];
+
+  const currentData = extractAuctionsCurrentInitialData(html);
+  if (currentData) values.push(currentData);
 
   for (const match of html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {
     parseJson(match[1], values);
@@ -124,12 +183,17 @@ function normalizeAuctions(values: unknown[]): Auction[] {
       id: url.split("/").filter(Boolean).at(-1) ?? url,
       title: cleanText(title ?? existing?.title ?? "Bring a Trailer auction"),
       url,
+      countryCode: stringValue(record.country_code) ?? stringValue(record.countryCode) ?? existing?.countryCode,
       location: cleanText(locationValue(record) ?? existing?.location ?? ""),
       currentBidUsd: bid ?? existing?.currentBidUsd,
+      currentBidFormatted: stringValue(record.current_bid_formatted) ?? existing?.currentBidFormatted,
       endsAt: endsAt ?? existing?.endsAt,
       hoursRemaining: hoursRemaining(endsAt) ?? existing?.hoursRemaining,
-      imageUrl: imageValue(record) ?? existing?.imageUrl,
+      imageUrl: stringValue(record.thumbnail_url) ?? imageValue(record) ?? existing?.imageUrl,
       excerpt: cleanText(stringValue(record.description) ?? existing?.excerpt ?? "").slice(0, 500),
+      noReserve: Boolean(record.noreserve ?? existing?.noReserve),
+      premium: Boolean(record.premium ?? existing?.premium),
+      year: stringValue(record.year) ?? existing?.year,
     };
     byUrl.set(url, auction);
   }
@@ -236,6 +300,26 @@ function cleanText(value?: string) {
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#8217;/g, "'")
+    .replace(/&nbsp;/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
+
+type BatListing = Record<string, unknown> & {
+  id?: number | string;
+  title?: string;
+  url?: string;
+  country?: string;
+  country_code?: string;
+  currency?: string;
+  current_bid?: number | string;
+  current_bid_formatted?: string;
+  timestamp_end?: number | string;
+  thumbnail_url?: string;
+  excerpt?: string;
+  searchable?: string;
+  noreserve?: boolean;
+  premium?: boolean;
+  year?: string;
+};

@@ -22,14 +22,16 @@ export async function runDailyAlert(options: DailyAlertOptions = {}) {
   const bot = options.dryRun ? null : await initializeChat();
   const adapter = bot?.getAdapter("sendblue");
   const results: DailyAlertResult[] = [];
+  const fromNumber = process.env.SENDBLUE_FROM_NUMBER ?? "";
 
   for (const recipient of recipients) {
-    const brief = await generateDailyBrief(recipient);
+    const conversationId = encodeSendBlueDirectThreadId(fromNumber, recipient);
+    const brief = await generateDailyBrief(recipient, { conversationId });
     const text = brief.text || "No strong BaT picks today.";
 
     if (adapter) {
       const threadId = adapter.encodeThreadId({
-        fromNumber: process.env.SENDBLUE_FROM_NUMBER ?? "",
+        fromNumber,
         contactNumber: recipient,
       });
       await adapter.postMessage(threadId, text);
@@ -50,4 +52,8 @@ export function parseRecipients(value?: string) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function encodeSendBlueDirectThreadId(fromNumber: string, contactNumber: string) {
+  return `sendblue:${Buffer.from(fromNumber).toString("base64url")}:${Buffer.from(contactNumber).toString("base64url")}`;
 }

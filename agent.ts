@@ -1,10 +1,11 @@
-import { readFile } from "fs/promises";
-import { join } from "path";
 import { ToolLoopAgent, stepCountIs, tool, type ModelMessage } from "ai";
 import { z } from "zod";
 import { getAuctionDetails, listFilteredAuctions } from "./lib/auction";
+import { openai } from "@ai-sdk/openai";
+import { getConversationCriteria, readDefaultCriteria, updateConversationCriteria } from "./lib/conversation-settings";
 
 export type AgentRuntime = {
+  conversationId?: string;
   threadId?: string;
   chat?: {
     send?: (adapter: string, threadId: string, message: string) => Promise<unknown>;
@@ -13,7 +14,7 @@ export type AgentRuntime = {
   canSendTyping?: boolean;
 };
 
-const model = process.env.AUCTION_ALERT_MODEL ?? "openai/gpt-5.5";
+const model = openai(process.env.AUCTION_ALERT_MODEL ?? "gpt-5.5");
 
 export function createAuctionAgent(runtime: AgentRuntime = {}) {
   return new ToolLoopAgent({
@@ -23,6 +24,9 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
       "Use the available tools to inspect live auctions and details before making recommendations.",
       "For daily briefs, choose only the cars worth alerting on. It is okay to say there are no good picks today.",
       "For chat replies, use the loaded conversation context. In group chats, pay attention to the sender label on each message.",
+      "Criteria are stored per conversation. Use readUserCriteria before making recommendations.",
+      "When a user asks to change what kinds of cars to prefer or avoid, call updateUserCriteria with the full revised criteria.",
+      "When a user asks for different objective auction filters, pass those options to listFilteredAuctions instead of updating criteria.",
       "Never use markdown formatting. iMessage is plain text.",
       "Keep messages short, opinionated, and useful. Prefer concrete reasons over generic enthusiasm.",
       "When you recommend auctions, include the URL only if the caller asks for inline links. The daily sender will send URLs separately.",
@@ -31,9 +35,15 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
     stopWhen: stepCountIs(8),
     tools: {
       listFilteredAuctions: tool({
-        description: "Fetch live Bring a Trailer auctions and return the configurable objective-filtered shortlist.",
-        inputSchema: z.object({}),
-        execute: async () => listFilteredAuctions(),
+        description:
+          "Fetch live Bring a Trailer auctions and return an objective-filtered shortlist. Override filters for user requests like under $40k, Canada, or ending within 6 hours. The source URL is fixed by app config.",
+        inputSchema: z.object({
+          country: z.string().length(2).optional().describe("ISO 3166-1 alpha-2 country code, e.g. US or CA. Defaults to app config."),
+          maxBidUsd: z.number().int().positive().optional().describe("Maximum current bid in USD. Defaults to app config."),
+          maxHoursRemaining: z.number().positive().optional().describe("Maximum hours remaining. Defaults to app config."),
+          limit: z.number().int().positive().max(100).optional().describe("Maximum number of auctions to return. Defaults to app config."),
+        }),
+        execute: async (options) => listFilteredAuctions(options),
       }),
       getAuctionDetails: tool({
         description: "Fetch a specific BaT auction page and extract listing details, comments, seller snippets, and bid history clues.",
@@ -43,9 +53,27 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
         execute: async ({ url }) => getAuctionDetails(url),
       }),
       readUserCriteria: tool({
-        description: "Read the editable markdown file that describes the user's subjective car taste.",
+        description: "Read this conversation's subjective car criteria from Upstash, falling back to the default markdown criteria.",
         inputSchema: z.object({}),
-        execute: async () => readUserCriteria(),
+        execute: async () => readUserCriteria(runtime.conversationId),
+      }),
+      updateUserCriteria: tool({
+        description:
+          "Persist revised subjective car criteria for this SendBlue conversation. Use when the user asks to prefer, avoid, remember, or change taste criteria.",
+        inputSchema: z.object({
+          criteria: z
+            .string()
+            .min(20)
+            .describe("The complete revised criteria text to save for this conversation. Include previous criteria that should remain."),
+        }),
+        execute: async ({ criteria }) => {
+          const settings = await updateConversationCriteria(runtime.conversationId, criteria);
+          return {
+            ok: true,
+            criteria: settings.criteria,
+            criteriaUpdatedAt: settings.criteriaUpdatedAt,
+          };
+        },
       }),
       tapback: tool({
         description: "Add an iMessage tapback reaction to the current conversation when a quick acknowledgement is better than text.",
@@ -93,12 +121,13 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
 
 export const auctionAgent = createAuctionAgent();
 
-export async function generateDailyBrief(recipientLabel: string) {
-  const agent = createAuctionAgent();
+export async function generateDailyBrief(recipientLabel: string, runtime: AgentRuntime = {}) {
+  const agent = createAuctionAgent(runtime);
   const result = await agent.generate({
     prompt: [
       `Generate today's BaT auction alert for ${recipientLabel}.`,
       "Call readUserCriteria and listFilteredAuctions. Use getAuctionDetails for the most promising candidates.",
+      "Use the default objective filters unless the conversation criteria clearly imply a stricter objective preference.",
       "Return one concise plain-text summary. Do not include markdown. Do not include auction URLs in the summary.",
     ].join("\n"),
   });
@@ -113,8 +142,8 @@ export async function respondToConversation(messages: ModelMessage[], runtime: A
   return result.text.trim();
 }
 
-export async function readUserCriteria() {
-  return readFile(join(process.cwd(), "config", "criteria.md"), "utf8");
+export async function readUserCriteria(conversationId?: string) {
+  return conversationId ? getConversationCriteria(conversationId) : readDefaultCriteria();
 }
 
 function extractBatUrlsFromSteps(steps: unknown[]) {
