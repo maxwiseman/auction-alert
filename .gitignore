@@ -1,8 +1,8 @@
-node_modules
-dist
-.data
+.next
 .nitro
-.cache
 .output
+.vercel
+node_modules
 .env
 .env.local
+*.tsbuildinfo

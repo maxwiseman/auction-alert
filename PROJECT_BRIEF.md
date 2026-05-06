@@ -10,7 +10,7 @@ Once per day, fetch live Bring a Trailer auctions, filter them down to plausible
 
 Start with this Bring a Trailer URL:
 
-https://bringatrailer.com/auctions/?location=US&ending=24&bidTo=25000
+https://bringatrailer.com/auctions
 
 The script should extract the embedded structured JSON from the HTML and normalize the auction list. The initial objective filters are:
 

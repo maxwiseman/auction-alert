@@ -1,0 +1,25 @@
+{
+  "name": "auction-alert",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nitro dev",
+    "build": "nitro build",
+    "preview": "node .output/server/index.mjs",
+    "test:daily": "bun scripts/test-daily-alert.ts",
+    "send:test-daily": "bun scripts/test-daily-alert.ts --send",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "ai": "^6.0.83",
+    "chat": "^4.23.0",
+    "chat-adapter-sendblue": "^0.1.0",
+    "nitropack": "^2.12.9",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0"
+  }
+}
