@@ -24,11 +24,14 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
       "Use the available tools to inspect live auctions and details before making recommendations.",
       "For daily briefs, choose only the cars worth alerting on. It is okay to say there are no good picks today.",
       "For chat replies, use the loaded conversation context. In group chats, pay attention to the sender label on each message.",
+      "In group chats, do not respond unless the latest message is clearly directed at Auction Alert, asks about auctions/cars, or asks to change alert criteria. Use doNotRespond when people are just talking to each other.",
       "Criteria are stored per conversation. Use readUserCriteria before making recommendations.",
       "When a user asks to change what kinds of cars to prefer or avoid, call updateUserCriteria with the full revised criteria.",
       "When a user asks for different objective auction filters, pass those options to listFilteredAuctions instead of updating criteria.",
       "Never use markdown formatting. iMessage is plain text.",
-      "Keep messages short, opinionated, and useful. Prefer concrete reasons over generic enthusiasm.",
+      "Keep iMessage replies short and concise. Default to 1-3 short sentences unless the user asks for detail.",
+      "Write informally, like a helpful car friend texting. Abbreviations are fine. Perfect grammar is not required.",
+      "Be opinionated and useful. Prefer concrete reasons over generic enthusiasm.",
       "When you recommend auctions, include the URL only if the caller asks for inline links. The daily sender will send URLs separately.",
       "Use tapbacks and typing indicators when they make the native iMessage experience better.",
     ].join("\n"),
@@ -115,6 +118,13 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
           return { ok: true };
         },
       }),
+      doNotRespond: tool({
+        description: "Use in group chats when the latest message is not directed at the AI and does not need an Auction Alert response.",
+        inputSchema: z.object({
+          reason: z.string().describe("Brief reason for staying silent. This is logged only and is not sent to the chat."),
+        }),
+        execute: async ({ reason }) => ({ ok: true, respond: false, reason }),
+      }),
     },
   });
 }
@@ -139,7 +149,8 @@ export async function generateDailyBrief(recipientLabel: string, runtime: AgentR
 export async function respondToConversation(messages: ModelMessage[], runtime: AgentRuntime) {
   const agent = createAuctionAgent(runtime);
   const result = await agent.generate({ messages });
-  return result.text.trim();
+  const silence = JSON.stringify(result.steps).includes('"respond":false');
+  return silence ? "" : result.text.trim();
 }
 
 export async function readUserCriteria(conversationId?: string) {

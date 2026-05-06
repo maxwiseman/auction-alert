@@ -68,8 +68,12 @@ async function answerThread(thread: Thread, message: Message) {
   const messages = [
     {
       role: "system" as const,
-      content:
+      content: [
         "Conversation history is loaded from SendBlue. Each user message is prefixed with its sender so group chats are understandable.",
+        isGroupThread(thread.id)
+          ? "This is a group chat. Only respond if the newest message is clearly directed at Auction Alert, asks about auctions/cars, or asks to change alert criteria. Otherwise call doNotRespond."
+          : "This is a direct conversation. Respond normally.",
+      ].join(" "),
     },
     ...history,
     {
