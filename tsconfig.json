@@ -1,9 +1,0 @@
-{
-  "extends": ["nitro/tsconfig"],
-  "compilerOptions": {
-    "types": ["node"],
-    "paths": {
-      "~/*": ["./*"]
-    }
-  }
-}
