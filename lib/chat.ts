@@ -52,8 +52,14 @@ async function answerThread(thread: Thread, message: Message) {
   log("thread subscribed", { threadId: thread.id });
 
   if (!isGroupThread(thread.id)) {
-    await thread.startTyping?.();
-    log("typing indicator sent or attempted", { threadId: thread.id });
+    void withTimeout(thread.startTyping?.(), 1500)
+      .then(() => log("typing indicator sent or attempted", { threadId: thread.id }))
+      .catch((error) =>
+        log("typing indicator skipped", {
+          threadId: thread.id,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
   }
 
   const history = await loadSendBlueHistory(thread.id);
@@ -141,6 +147,22 @@ function messageSummary(thread: Thread, message: Message) {
 
 function log(message: string, data?: Record<string, unknown>) {
   console.log(`[auction-alert] ${message}`, data ?? "");
+}
+
+async function withTimeout<T>(promise: Promise<T> | undefined, ms: number) {
+  if (!promise) return undefined;
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 type ChatMessage = {

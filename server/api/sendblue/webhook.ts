@@ -24,7 +24,9 @@ export default defineHandler(async (event) => {
   });
 
   const bot = await initializeChat();
-  return bot.webhooks.sendblue(event.req);
+  return bot.webhooks.sendblue(event.req, {
+    waitUntil: (task) => event.waitUntil(task),
+  });
 });
 
 async function safeJson(request: Request) {
