@@ -32,24 +32,50 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
       "Keep iMessage replies short and concise. Default to 1-3 short sentences unless the user asks for detail.",
       "Write informally, like a helpful car friend texting. Abbreviations are fine. Perfect grammar is not required.",
       "Be opinionated and useful. Prefer concrete reasons over generic enthusiasm.",
+      "Assume BaT vehicles are in decent condition unless the listing details mention a real issue. Do not invent generic condition worries.",
+      "If there are major issues, they should be visible in the listing description, details, comments, or bid history returned by tools.",
       "When you recommend auctions, include the URL only if the caller asks for inline links. The daily sender will send URLs separately.",
-      "Use tapbacks and typing indicators when they make the native iMessage experience better.",
+      "Use tapbacks when they make the native iMessage experience better.",
     ].join("\n"),
     stopWhen: stepCountIs(8),
     tools: {
       listFilteredAuctions: tool({
         description:
-          "Fetch live Bring a Trailer auctions and return an objective-filtered shortlist. Override filters for user requests like under $40k, Canada, or ending within 6 hours. The source URL is fixed by app config.",
+          "Fetch live Bring a Trailer auctions and return compact objective-filtered rows: title, current bid, time remaining, and URL. Override filters for user requests like under $40k, Canada, or ending within 6 hours. Call getAuctionDetails for description, comments, bid history, or full listing info. The source URL is fixed by app config.",
         inputSchema: z.object({
           country: z.string().length(2).optional().describe("ISO 3166-1 alpha-2 country code, e.g. US or CA. Defaults to app config."),
           maxBidUsd: z.number().int().positive().optional().describe("Maximum current bid in USD. Defaults to app config."),
           maxHoursRemaining: z.number().positive().optional().describe("Maximum hours remaining. Defaults to app config."),
-          limit: z.number().int().positive().max(100).optional().describe("Maximum number of auctions to return. Defaults to app config."),
+          minYear: z.number().int().min(1885).max(2100).optional().describe("Minimum model year to include, e.g. 1960."),
+          maxYear: z.number().int().min(1885).max(2100).optional().describe("Maximum model year to include, e.g. 1989."),
+          origins: z
+            .array(
+              z.enum([
+                "American",
+                "Brazilian",
+                "British",
+                "Canadian",
+                "Czech",
+                "Dutch",
+                "French",
+                "German",
+                "Italian",
+                "Japanese",
+                "Korean",
+                "Prewar",
+                "Spanish",
+                "Swedish",
+              ]),
+            )
+            .optional()
+            .describe("BaT Origin picker values to include, e.g. British, German, Italian, Japanese, or American."),
+          limit: z.number().int().positive().max(200).optional().describe("Maximum number of auctions to return. Defaults to app config."),
         }),
         execute: async (options) => listFilteredAuctions(options),
       }),
       getAuctionDetails: tool({
-        description: "Fetch a specific BaT auction page and extract listing details, comments, seller snippets, and bid history clues.",
+        description:
+          "Fetch a specific BaT auction detail page and extract the full listing description, essentials, current bid, time left, comments, seller comments, and bid history.",
         inputSchema: z.object({
           url: z.string().url().describe("Bring a Trailer auction listing URL"),
         }),
@@ -90,21 +116,6 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
           if (!adapter?.addReaction) return { ok: false, reason: "SendBlue adapter does not expose addReaction." };
           await adapter.addReaction(runtime.threadId, messageId ?? runtime.threadId, reaction);
           return { ok: true };
-        },
-      }),
-      startTyping: tool({
-        description: "Send the native iMessage typing bubble. SendBlue only supports this in 1:1 conversations.",
-        inputSchema: z.object({}),
-        execute: async () => {
-          if (!runtime.chat || !runtime.threadId || runtime.canSendTyping === false) {
-            return { ok: false, reason: "Typing indicators are only available for active 1:1 SendBlue chats." };
-          }
-          const adapter = runtime.chat.getAdapter?.("sendblue") as SendblueLike | undefined;
-          if (adapter?.startTyping) {
-            await adapter.startTyping(runtime.threadId);
-            return { ok: true };
-          }
-          return { ok: false, reason: "SendBlue adapter does not expose startTyping." };
         },
       }),
       sendRichLink: tool({
@@ -173,5 +184,4 @@ function extractBatUrlsFromSteps(steps: unknown[]) {
 
 type SendblueLike = {
   addReaction?: (threadId: string, messageId: string, reaction: string) => Promise<unknown>;
-  startTyping?: (threadId: string) => Promise<unknown>;
 };
