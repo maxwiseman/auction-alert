@@ -35,10 +35,6 @@ export async function runDailyAlert(options: DailyAlertOptions = {}) {
         contactNumber: recipient,
       });
       await adapter.postMessage(threadId, text);
-
-      for (const url of brief.urls) {
-        await adapter.postMessage(threadId, url);
-      }
     }
 
     results.push({ recipient, text, urls: brief.urls, sent: Boolean(adapter) });

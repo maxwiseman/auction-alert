@@ -34,8 +34,8 @@ export function createAuctionAgent(runtime: AgentRuntime = {}) {
       "Be opinionated and useful. Prefer concrete reasons over generic enthusiasm.",
       "Assume BaT vehicles are in decent condition unless the listing details mention a real issue. Do not invent generic condition worries.",
       "If there are major issues, they should be visible in the listing description, details, comments, or bid history returned by tools.",
-      "When you reference a specific car, include its Bring a Trailer URL in the same message.",
-      "If you need a car URL after inspecting details, use the url field returned by getAuctionDetails.",
+      "Before you talk about a specific car at auction, you must call getAuctionDetails for that auction, review the returned details, and then decide whether it is worth mentioning.",
+      "When you reference a specific car, include its Bring a Trailer URL inline in the same message. Use the url field returned by getAuctionDetails.",
       "Use tapbacks when they make the native iMessage experience better.",
     ].join("\n"),
     stopWhen: stepCountIs(8),
@@ -137,13 +137,14 @@ export async function generateDailyBrief(recipientLabel: string, runtime: AgentR
   const result = await agent.generate({
     prompt: [
       `Generate today's BaT auction alert for ${recipientLabel}.`,
-      "Call readUserCriteria and listFilteredAuctions. Use getAuctionDetails for the most promising candidates.",
+      "Call readUserCriteria and listFilteredAuctions.",
+      "If you want to talk about a car at auction, first call getAuctionDetails for that auction and review the details. Only include cars you inspected with getAuctionDetails.",
       "Use the default objective filters unless the conversation criteria clearly imply a stricter objective preference.",
-      "Return one concise plain-text summary. Do not include markdown. Do not include auction URLs in the summary.",
+      "Return one concise plain-text summary. Do not include markdown. Include each mentioned car's BaT URL inline in the summary using the url returned by getAuctionDetails.",
     ].join("\n"),
   });
 
-  const urls = extractBatUrlsFromSteps(result.steps);
+  const urls = extractBatUrlsFromText(result.text);
   return { text: result.text.trim(), urls };
 }
 
@@ -158,10 +159,10 @@ export async function readUserCriteria(conversationId?: string) {
   return conversationId ? getConversationCriteria(conversationId) : readDefaultCriteria();
 }
 
-function extractBatUrlsFromSteps(steps: unknown[]) {
+function extractBatUrlsFromText(text: string) {
   const seen = new Set<string>();
   const urls: string[] = [];
-  JSON.stringify(steps).replace(/https:\/\/bringatrailer\.com\/listing\/[a-z0-9-_/]+/gi, (url) => {
+  text.replace(/https:\/\/bringatrailer\.com\/listing\/[a-z0-9-_/]+/gi, (url) => {
     const clean = url.replace(/[),.]+$/, "");
     if (!seen.has(clean)) {
       seen.add(clean);
