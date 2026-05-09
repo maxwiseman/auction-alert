@@ -1,0 +1,7 @@
+:root { color-scheme: dark; }
+body { margin: 0; font-family: Inter, system-ui, sans-serif; background: #111827; color: #f9fafb; }
+main { max-width: 860px; margin: 0 auto; padding: 2rem 1rem; }
+button { background:#2563eb; color:white; border:none; border-radius:8px; padding:.6rem 1rem; font-weight:600; cursor:pointer; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+.card { background:#1f2937; border:1px solid #374151; border-radius:12px; padding:1rem; margin-top:1rem; }
+pre { white-space:pre-wrap; }

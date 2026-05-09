@@ -4,9 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "nitro dev",
-    "build": "nitro build",
-    "preview": "node .output/server/index.mjs",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
     "test:auctions": "bun scripts/test-auctions.ts",
     "test:daily": "bun scripts/test-daily-alert.ts",
     "send:test-daily": "bun scripts/test-daily-alert.ts --send",
@@ -18,11 +19,15 @@
     "ai": "^6.0.83",
     "chat": "^4.23.0",
     "chat-adapter-sendblue": "^0.1.0",
-    "nitro": "^3.0.260429-beta",
+    "next": "^15.3.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
     "zod": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "@types/react": "^19.1.2",
+    "@types/react-dom": "^19.1.2",
     "typescript": "^5.7.0"
   }
 }
