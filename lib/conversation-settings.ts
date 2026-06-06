@@ -14,7 +14,7 @@ export type ConversationMessage = {
 };
 
 const keyPrefix = "auction-alert:conversation";
-const recentMessageLimit = 20;
+export const recentConversationMessageLimit = 30;
 let redis: Redis | undefined;
 
 export async function getConversationCriteria(conversationId?: string) {
@@ -57,13 +57,13 @@ export async function appendConversationMessage(conversationId: string | undefin
     ...message,
     createdAt: new Date().toISOString(),
   });
-  await getRedis().ltrim(messagesKey(conversationId), 0, recentMessageLimit - 1);
+  await getRedis().ltrim(messagesKey(conversationId), 0, recentConversationMessageLimit - 1);
 }
 
 export async function getConversationMessages(conversationId: string | undefined): Promise<ConversationMessage[]> {
   if (!conversationId || !hasRedisEnv()) return [];
 
-  const messages = await getRedis().lrange<ConversationMessage>(messagesKey(conversationId), 0, recentMessageLimit - 1);
+  const messages = await getRedis().lrange<ConversationMessage>(messagesKey(conversationId), 0, recentConversationMessageLimit - 1);
   return messages.reverse();
 }
 

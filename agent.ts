@@ -19,6 +19,11 @@ const model = openai(process.env.AUCTION_ALERT_MODEL ?? "gpt-5.5");
 export function createAuctionAgent(runtime: AgentRuntime = {}) {
   return new ToolLoopAgent({
     model,
+    providerOptions: {
+      openai: {
+        truncation: "auto",
+      },
+    },
     instructions: [
       "You are Auction Alert, a concise Bring a Trailer iMessage assistant.",
       "Use the available tools to inspect live auctions and details before making recommendations.",

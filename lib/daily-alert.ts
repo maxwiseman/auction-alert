@@ -1,5 +1,6 @@
 import { generateDailyBrief } from "../agent";
 import { initializeChat } from "./chat";
+import { appendConversationMessage } from "./conversation-settings";
 
 export type DailyAlertOptions = {
   dryRun?: boolean;
@@ -35,6 +36,7 @@ export async function runDailyAlert(options: DailyAlertOptions = {}) {
         contactNumber: recipient,
       });
       await adapter.postMessage(threadId, text);
+      await appendConversationMessage(conversationId, { role: "assistant", content: text });
     }
 
     results.push({ recipient, text, urls: brief.urls, sent: Boolean(adapter) });

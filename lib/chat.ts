@@ -1,7 +1,7 @@
 import { Chat, type Message, type Thread } from "chat";
 import { createSendblueAdapter, type SendblueMessagePayload } from "chat-adapter-sendblue";
 import { respondToConversation } from "../agent";
-import { appendConversationMessage, getConversationMessages } from "./conversation-settings";
+import { appendConversationMessage, getConversationMessages, recentConversationMessageLimit } from "./conversation-settings";
 import { createMemoryState } from "./memory-state";
 
 export const chat = new Chat({
@@ -114,7 +114,7 @@ async function answerThread(thread: Thread, message: Message) {
 
 async function loadSendBlueHistory(threadId: string) {
   const adapter = chat.getAdapter("sendblue");
-  const messages = await adapter.fetchMessages?.(threadId, { limit: 20 });
+  const messages = await adapter.fetchMessages?.(threadId, { limit: recentConversationMessageLimit });
   const items = (messages?.messages ?? []) as Message<SendblueMessagePayload>[];
   const outbound = items.filter((item) => isOutbound(item)).length;
   log("sendblue fetchMessages result", { threadId, messages: items.length, outbound, nextCursor: messages?.nextCursor });
@@ -147,7 +147,7 @@ async function loadConversationHistory(threadId: string) {
     mergedMessages: merged.length,
   });
 
-  return merged.slice(-20);
+  return merged.slice(-recentConversationMessageLimit);
 }
 
 function isOutbound(message: Message<SendblueMessagePayload>) {
